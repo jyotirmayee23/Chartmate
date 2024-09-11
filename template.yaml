@@ -7,7 +7,7 @@ Description: >
 
 Globals:
   Function:
-    Runtime: python3.10
+    Runtime: python3.11
     Handler: main.lambda_handler
     Architectures:
       - x86_64
@@ -26,10 +26,10 @@ Resources:
         AllowHeaders: "'*'"
         AllowMethods: "'*'"
 
-  NucleonFunction:
+  ChartmateFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: src/Nucleon/
+      CodeUri: src/Chartmate/
       Timeout: 480
       MemorySize: 2048
       Policies:
@@ -39,8 +39,8 @@ Resources:
               Action:
                 - "s3:*"
               Resource:
-                - "arn:aws:s3:::nucleus-demo-jyoti"
-                - "arn:aws:s3:::nucleus-demo-jyoti/*"
+                - "arn:aws:s3:::chartmate-idp"
+                - "arn:aws:s3:::chartmate-idp/*"
         - Statement:
             - Sid: "BedrockScopedAccess"
               Effect: "Allow"
@@ -63,15 +63,12 @@ Resources:
                 - "ssm:GetParametersByPath" # Add other SSM actions as needed
                 - "ssm:PutParameter"
               Resource: "*"
-      Environment:
-        Variables:
-          FOLDER_PATH: "final-testing/final-testing/Banyan-Hospital/SUNIL-JOHARY"
       Events:
         Root:
           Type: Api
           Properties:
             RestApiId: !Ref Api
-            Path: /Nucleon
+            Path: /Chartmate
             Method: POST
       
   RequestApiFunction:
@@ -85,7 +82,7 @@ Resources:
             - Sid: "InvokeRequestApiFunction"
               Effect: "Allow"
               Action: "lambda:InvokeFunction"
-              Resource: !GetAtt NucleonFunction.Arn
+              Resource: !GetAtt ChartmateFunction.Arn
               # NUCLEON_FUNCTION_ARN: !GetAtt NucleonFunction.Arn
         - Statement:
             - Sid: "FullAccessToS3Bucket"
@@ -93,8 +90,8 @@ Resources:
               Action:
                 - "s3:*"
               Resource:
-                - "arn:aws:s3:::nucleus-demo-jyoti/*"
-                - "arn:aws:s3:::nucleus-demo-jyoti/"
+                - "arn:aws:s3:::chartmate-idp/*"
+                - "arn:aws:s3:::chartmate-idp/"
         - Statement:
             - Sid: "SSMAccess"
               Effect: "Allow"
@@ -107,7 +104,7 @@ Resources:
       Environment:
         Variables:
           FOLDER_PATH: "final-testing/final-testing/Banyan-Hospital/SUNIL-JOHARY"
-          NUCLEON_FUNCTION_ARN: !GetAtt NucleonFunction.Arn
+          NUCLEON_FUNCTION_ARN: !GetAtt ChartmateFunction.Arn
       Events:
         Root:
           Type: Api

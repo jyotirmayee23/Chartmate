@@ -1,0 +1,148 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: 'Document Extraction
+
+  SAM Template for ChartMate
+
+  '
+Globals:
+  Function:
+    Runtime: python3.11
+    Handler: main.lambda_handler
+    Architectures:
+    - x86_64
+    Tracing: Active
+    Environment:
+      Variables:
+        LOG_LEVEL: INFO
+Resources:
+  Api:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: dev
+      Cors:
+        AllowOrigin: '''*'''
+        AllowHeaders: '''*'''
+        AllowMethods: '''*'''
+  ChartmateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ChartmateFunction
+      Timeout: 480
+      MemorySize: 2048
+      Policies:
+      - Statement:
+        - Sid: FullAccessToS3Bucket
+          Effect: Allow
+          Action:
+          - s3:*
+          Resource:
+          - arn:aws:s3:::chartmate-idp
+          - arn:aws:s3:::chartmate-idp/*
+      - Statement:
+        - Sid: BedrockScopedAccess
+          Effect: Allow
+          Action:
+          - bedrock:InvokeModel
+          Resource:
+          - arn:aws:bedrock:*::foundation-model/*
+      - Statement:
+        - Sid: FullAccessToTextract
+          Effect: Allow
+          Action:
+          - textract:*
+          Resource: '*'
+      - Statement:
+        - Sid: SSMAccess
+          Effect: Allow
+          Action:
+          - ssm:GetParameter
+          - ssm:GetParameters
+          - ssm:GetParametersByPath
+          - ssm:PutParameter
+          Resource: '*'
+      Events:
+        Root:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: Api
+            Path: /Chartmate
+            Method: POST
+    Metadata:
+      SamResourceId: ChartmateFunction
+  RequestApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: RequestApiFunction
+      Timeout: 480
+      MemorySize: 2048
+      Policies:
+      - Statement:
+        - Sid: InvokeRequestApiFunction
+          Effect: Allow
+          Action: lambda:InvokeFunction
+          Resource:
+            Fn::GetAtt:
+            - ChartmateFunction
+            - Arn
+      - Statement:
+        - Sid: FullAccessToS3Bucket
+          Effect: Allow
+          Action:
+          - s3:*
+          Resource:
+          - arn:aws:s3:::chartmate-idp/*
+          - arn:aws:s3:::chartmate-idp/
+      - Statement:
+        - Sid: SSMAccess
+          Effect: Allow
+          Action:
+          - ssm:GetParameter
+          - ssm:GetParameters
+          - ssm:GetParametersByPath
+          - ssm:PutParameter
+          Resource: '*'
+      Environment:
+        Variables:
+          FOLDER_PATH: final-testing/final-testing/Banyan-Hospital/SUNIL-JOHARY
+          NUCLEON_FUNCTION_ARN:
+            Fn::GetAtt:
+            - ChartmateFunction
+            - Arn
+      Events:
+        Root:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: Api
+            Path: /requestapi
+            Method: POST
+    Metadata:
+      SamResourceId: RequestApiFunction
+  ResponseApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ResponseApiFunction
+      Timeout: 480
+      MemorySize: 2048
+      Policies:
+      - Statement:
+        - Sid: SSMAccess
+          Effect: Allow
+          Action:
+          - ssm:GetParameter
+          - ssm:GetParameters
+          - ssm:GetParametersByPath
+          - ssm:PutParameter
+          Resource: '*'
+      Events:
+        Root:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: Api
+            Path: /responseapi
+            Method: POST
+    Metadata:
+      SamResourceId: ResponseApiFunction
