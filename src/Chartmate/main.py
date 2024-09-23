@@ -159,77 +159,34 @@ data_json = {
 }
 data_json_str = json.dumps(data_json)
 
-# @logger.inject_lambda_context(log_event=True)
+
 def lambda_handler(event, context):
     job_id = event['job_id']
     links = event.get('links', [])
-    print(f"Links received: {links}")
-    # image_text = ""
-    # pdf_image_text = ""
     all_table_info = []
     all_final_maps = {}
     aggregated_text = ""
 
     for link in links:
         url_parts = link.split('/')
-        # print("url", url_parts)
         bucket_name1 = url_parts[2]
         if '.s3.amazonaws.com' in bucket_name1:
             bucket_name = bucket_name1.rstrip('.s3.amazonaws.com')
         else:
             bucket_name = bucket_name1
 
-        print("23",bucket_name)
-
-        # all_table_info = []
-        # # all_final_maps = {}
-        # all_final_maps = []
-
-
-        # print("er",bucket_name)
-
         object_key = '/'.join(url_parts[3:])
-        # aggregated_text = ""
-        
-        # print("key",object_key)
-
-        if object_key.lower().endswith(supported_image_formats):
-            # Call Textract to extract text from the image
-            a_response = textract.analyze_document(
-                Document={'S3Object': {'Bucket': bucket_name, 'Name': object_key}},
-                FeatureTypes=["FORMS", "TABLES"],
-            )
-
-
-            word_map = map_word_id(a_response)
-            table = extract_table_info(a_response, word_map)
-            key_map = get_key_map(a_response, word_map)
-            value_map = get_value_map(a_response, word_map)
-            final_map = get_kv_map(key_map, value_map)
-            # print("45",table)
-
-            all_table_info.append(table)
-            # print("3",all_table_info)
-            # print("jj",json.dumps(all_table_info,indent=2))
-            # all_final_maps.update(final_map)
-            all_final_maps.update(final_map)
-            print("maps",all_final_maps)
-
             
-            # print("image_text_123", image_text)
-        elif object_key.lower().endswith('.pdf'):
+        if object_key.lower().endswith('.pdf'):
             local_path = '/tmp/' + object_key.split('/')[-1]
-            # print("Local path:", local_path)
             s3.download_file(bucket_name, object_key, local_path)
             base_name = os.path.splitext(object_key.split('/')[-1])[0]
 
             pdf_document = fitz.open(local_path)
             for page_number in range(len(pdf_document)):
                 page = pdf_document.load_page(page_number)
-                # print("@",page)
                 pix = page.get_pixmap()
                 output_image_path = f'/tmp/{base_name}_page_{page_number + 1}.png'
-                print("1",output_image_path)
                 pix.save(output_image_path)
 
 
@@ -241,9 +198,6 @@ def lambda_handler(event, context):
                     for item in a_response['Blocks']:
                         if item['BlockType'] == 'LINE':
                             aggregated_text += item['Text'] + " " 
-                    
-                    # print(f"Extracted Text for Page {page_number + 1}:")
-    print("yuyuyu",aggregated_text)
 
 
     body = json.dumps({
@@ -268,25 +222,15 @@ def lambda_handler(event, context):
         ],
     })
 
-    # response = bedrock_runtime.invoke_model(
-    #     modelId="anthropic.claude-3-sonnet-20240229-v1:0",
-    #     body=body
-    # )
-
     response = bedrock_runtime.invoke_model(
         modelId="anthropic.claude-3-haiku-20240307-v1:0",
         body=body
     )
 
-    # # Read and parse the response
     response_body = json.loads(response.get("body").read())
 
-    print("Response from Bedrock model:")
-    print(response_body)
     input_tokens = response_body['usage']['input_tokens']
     output_tokens = response_body['usage']['output_tokens']
-    print("Input Tokens:", input_tokens)
-    print("Output Tokens:", output_tokens)
     result = response_body['content'][0]['text']
 
      # Parse the result string to JSON
