@@ -5,8 +5,10 @@ import os
 
 ssm_client = boto3.client('ssm')
 lambda_client = boto3.client('lambda')
-secondary_lambda_arn = os.getenv('NUCLEON_FUNCTION_ARN')
+secondary_lambda_arn = os.getenv('CHARTMATE_FUNCTION_ARN')
 print("@",secondary_lambda_arn)
+
+
 
 def invoke_secondary_lambda_async(payload):
     response = lambda_client.invoke(
@@ -27,6 +29,8 @@ def lambda_handler(event, context):
     for link in processing_links:
         link = link.replace('+', ' ')
         links.append(link)
+
+    
         
     print(f"Links received: {links}")
     # for link in links:
@@ -40,10 +44,16 @@ def lambda_handler(event, context):
     )
     
     # Prepare payload for the secondary Lambda function
+    # payload = {
+    #     "job_id": job_id,
+    #     "event_data": event,
+    #     "links": links
+    # }
+
     payload = {
         "job_id": job_id,
         "event_data": event,
-        "links": links
+        "links": links,
     }
 
     print("2",payload)
