@@ -7,7 +7,7 @@ Description: >
 
 Globals:
   Function:
-    Runtime: python3.11
+    Runtime: python3.10
     Handler: main.lambda_handler
     Architectures:
       - x86_64
@@ -26,10 +26,54 @@ Resources:
         AllowHeaders: "'*'"
         AllowMethods: "'*'"
 
-  ChartmateFunction:
+  ChartmateExtractionFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: src/Chartmate/
+      CodeUri: src/Chartmate_Extraction/
+      Timeout: 580
+      MemorySize: 2048
+      Policies:
+        - Statement:
+            - Sid: "FullAccessToS3Bucket"
+              Effect: "Allow"
+              Action:
+                - "s3:*"
+              Resource:
+                - "arn:aws:s3:::chartmate-idp"
+                - "arn:aws:s3:::chartmate-idp/*"
+        # - Statement:
+        #     - Sid: "InvokeRequestApiFunction"
+        #       Effect: "Allow"
+        #       Action: "lambda:InvokeFunction"
+        #       Resource: !GetAtt ChartmateFunction.Arn
+        - Statement:
+            - Sid: "BedrockScopedAccess"
+              Effect: "Allow"
+              Action:
+                - "bedrock:InvokeModel"
+              Resource:
+                - "arn:aws:bedrock:*::foundation-model/*"
+        - Statement:
+            - Sid: "SSMAccess"
+              Effect: "Allow"
+              Action:
+                - "ssm:GetParameter"
+                - "ssm:GetParameters"
+                - "ssm:GetParametersByPath" # Add other SSM actions as needed
+                - "ssm:PutParameter"
+              Resource: "*"
+      Events:
+        Root:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /Chartmate_extraction
+            Method: POST
+
+  ChartmateEmbeddingFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/Chartmate_Embeddings/
       Timeout: 480
       MemorySize: 2048
       Policies:
@@ -41,6 +85,11 @@ Resources:
               Resource:
                 - "arn:aws:s3:::chartmate-idp"
                 - "arn:aws:s3:::chartmate-idp/*"
+        - Statement:
+            - Sid: "InvokeRequestApiFunction"
+              Effect: "Allow"
+              Action: "lambda:InvokeFunction"
+              Resource: !GetAtt ChartmateExtractionFunction.Arn
         - Statement:
             - Sid: "BedrockScopedAccess"
               Effect: "Allow"
@@ -63,6 +112,63 @@ Resources:
                 - "ssm:GetParametersByPath" # Add other SSM actions as needed
                 - "ssm:PutParameter"
               Resource: "*"
+      Environment:
+        Variables:
+          CHARTMATE_EXTRACTION_FUNCTION_ARN: !GetAtt ChartmateExtractionFunction.Arn
+      Events:
+        Root:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /Chartmate_embeddings
+            Method: POST
+
+
+  ChartmateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/Chartmate/
+      Timeout: 480
+      MemorySize: 2048
+      Policies:
+        - Statement:
+            - Sid: "FullAccessToS3Bucket"
+              Effect: "Allow"
+              Action:
+                - "s3:*"
+              Resource:
+                - "arn:aws:s3:::chartmate-idp"
+                - "arn:aws:s3:::chartmate-idp/*"
+        - Statement:
+            - Sid: "InvokeRequestApiFunction"
+              Effect: "Allow"
+              Action: "lambda:InvokeFunction"
+              Resource: !GetAtt ChartmateEmbeddingFunction.Arn
+        - Statement:
+            - Sid: "BedrockScopedAccess"
+              Effect: "Allow"
+              Action:
+                - "bedrock:InvokeModel"
+              Resource:
+                - "arn:aws:bedrock:*::foundation-model/*"
+        - Statement:
+            - Sid: "FullAccessToTextract"
+              Effect: "Allow"
+              Action:
+                - "textract:*"
+              Resource: "*"
+        - Statement:
+            - Sid: "SSMAccess"
+              Effect: "Allow"
+              Action:
+                - "ssm:GetParameter"
+                - "ssm:GetParameters"
+                - "ssm:GetParametersByPath" # Add other SSM actions as needed
+                - "ssm:PutParameter"
+              Resource: "*"
+      Environment:
+        Variables:
+          CHARTMATE_EMBEDDING_FUNCTION_ARN: !GetAtt ChartmateEmbeddingFunction.Arn
       Events:
         Root:
           Type: Api
@@ -103,8 +209,7 @@ Resources:
               Resource: "*"
       Environment:
         Variables:
-          FOLDER_PATH: "final-testing/final-testing/Banyan-Hospital/SUNIL-JOHARY"
-          NUCLEON_FUNCTION_ARN: !GetAtt ChartmateFunction.Arn
+          CHARTMATE_FUNCTION_ARN: !GetAtt ChartmateFunction.Arn
       Events:
         Root:
           Type: Api
@@ -129,6 +234,13 @@ Resources:
                 - "ssm:GetParametersByPath" # Add other SSM actions as needed
                 - "ssm:PutParameter"
               Resource: "*"
+            - Sid: "FullAccessToS3Bucket"
+              Effect: "Allow"
+              Action:
+                - "s3:*"
+              Resource:
+                - "arn:aws:s3:::chartmate-idp/*"
+                - "arn:aws:s3:::chartmate-idp/"
       Events:
         Root:
           Type: Api
