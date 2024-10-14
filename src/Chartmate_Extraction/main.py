@@ -18,78 +18,72 @@ import concurrent.futures
 # import uuid
 
 
+from langchain_core.prompts import ChatPromptTemplate
 prompt = ChatPromptTemplate.from_template("""Please fill in the missing details in the following information::
 <context>
 {context}
 </context>
 
-please only return in json (fill the values)
-retrieve the appropriate values from the context
+please only return in json (fill the values).
+please return evrything and dont stop at the middle.
+please return in correct json format only.
+retrieve the aprropriate values from the context.
+Only Answer from the context.
+return not found in case you do not found an answer instead of keeping blank.
 Question: {input}""")
 
 patient_info = {
-    "patientInformation": {
+    "patient Information": {
             "fullName": "",
-            "dateOfBirth": "",
+            "dateOfBirth": "//should be in this format xx/xx/xxxx",
             "gender": "////would be nice to have male, female or not-known",
             "address": {
                 "streetNumber": "",
                 "streetName": "",
-                "apartmentUnitNumber": "",
+                "apartment UnitNumber": "",
                 "city": "",
                 "state": "",
                 "zipCode": ""
             },
             "contactInformation": {
-                "Emergency Contact": "",
-                "Primary Contact": "",
                 "homePhone": "",
                 "mobilePhone": ""
             },
-            "advancedDirective": "",
-            "insuranceInformation": {
-                "primaryInsurance": {
-                    "providerName": "",
-                    "policyInsuranceHolder": "",
-                    "planDetails": "",
-                    "policyNumber": "",
-                    "groupNumber": "",
-                    "contactDetails": ""
-                },
-                "secondaryInsurance": {
-                    "providerName": "",
-                    "policyInsuranceHolder": "",
-                    "planDetails": "",
-                    "policyNumber": "",
-                    "groupNumber": "",
-                    "contactDetails": ""
-                }
-            }
+            "advanced Directive": "//if advance directive found , then check the respective file details also.",
         }
 }
 
-prompt_patient_info = """
-Return only the filled JSON object with all keys present. If a detail is not available, set its value to null. Do not include any introductory text or explanations.
-get the answer for each value.
-get correct answer for each of the key.
-"""
+insurance = {
+    "insurance Information": {
+                "primary Insurance": {
+                    "payor Name": "//Name of the insurance company",
+                    "policyInsuranceHolder": "",
+                    "planDetails": "",
+                    "policy Number": "",
+                    "group Number": "//group number of primary insurance ",
+                    "contactDetails": "//phone number in primary insurance",
+                },
+                "secondary Insurance": {
+                    "payor Name": "//Name of the insurance company/insurance name(secondary)",
+                    "policyInsuranceHolder": "",
+                    "planDetails": "",
+                    "policy Number": "",
+                    "group Number": "//group number of secondary insurance",
+                    "contactDetails": "//phone number in secondary insurance",
+                }
+            }
+}
 
 reason_for_referral = {
-    "reasonForReferral": {
-            "detailedDescription": ""
+    "reason for Referral": {
+            "detailed Description": "///what is the reason for referral in order ?"
     }
         
 }
 
-prompt_reason_for_referral = """
-Return only the filled JSON object with all keys present. If a detail is not available, set its value to null. Do not include any introductory text or explanations.
-get the answer for each value.
-
-"""
-
 requested_service = {
     "requested Services": {
-            "specific Services Requested": [
+            "specific Services Requested": ["//only return the mentioned service from the below."
                 "Skilled Nursing",
                 "Physical Therapy (PT)",
                 "Occupational Therapy (OT)",
@@ -100,487 +94,166 @@ requested_service = {
         }
 }
 
-prompt_requested_service = """
-Return only the filled JSON object with all keys present. If a detail is not available, set its value to null. Do not include any introductory text or explanations.
-get the answer for each value.
-only return the required service from the context
-"""
-
 s_o_r = {
     "sourceOfReferral": {
             "referringPhysicianProvider": {
-                "name": "",
+                "name": "//find it from the order section",
                 "address": {
-                    "street Number": "",
-                    "street Name": "",
-                    "suite Number": "",
+                    "streetNumber": "",
+                    "streetName": "",
+                    "suiteNumber": "",
                     "city": "",
                     "state": "",
                     "zipCode": ""
                 },
                 "contactInformation": {
                     "phoneNumber": "",
-                    "faxNumber": "",
-                    "emailAddress": ""
+                    "faxNumber": ""
                 }
             }
         }
 }
 
 
-
-prompt_s_o_r = """
-get the providers full address and answer from that only.
-Return only the filled JSON object with all keys present. If a detail is not available, set its value to null. Do not include any introductory text or explanations.
-get the answer for each value. 
-"""
-
-
-clinical_history = {
-    "clinical History": {
-            "comprehensive Medical History": {
-                "current Diagnoses": [
-                    {
-                        "description": "",
-                        "icd10 Code": "",
-                        "onset Date": ""
-                    }
-                ],
-                "past Diagnoses": [
-                    {
-                        "description": "",
-                        "icd10 Code": ""
-                    }
-                ],
-                "past Medical History": [
-                    {}
-                ],
-                "recent Surgeries Surgical History": [
-                    {
-                        "name": "",
-                        "date Year": ""
-                    }
-                ],
-                "patient's Pharmacy": [
-                    {
-                        "name": "",
-                        "phone Number": "",
-                        "address": {
-                            "street Number": "",
-                            "street Name": "",
-                            "suite Number": "",
-                            "city": "",
-                            "state": "",
-                            "zipCode": ""
-                        }
-                    }
-                ],
-                "relevant Lab Results": [],
-                "imaging Reports": [],
-                "diagnostic Studies": []
-            }
+clinical_history_Current_Diagnoses = {
+    "clinicalHistory": {
+        "current Diagnoses": {
+            "current Diagnoses": ["//only return current diagnoses.description,icd10code"]
         }
+    }
+}
+
+clinical_history_Past_Diagnoses = {
+    "clinicalHistory": {
+        "Past Medical History": {
+            "Past Medical History": ["//only return medical history. description,icd10code"]
+        }
+    }
+}
+
+clinical_history_recent_Surgical_History = {
+    "clinicalHistory": {
+        "comprehensiveMedicalHistory": {
+            "recentSurgicalHistory": ["name,date"]
+        }
+    }
 }
 
 
+# clinical_history_past_Medical_History = {
+#     "clinicalHistory": {
+#         "comprehensiveMedicalHistory": {
+#             "pastMedicalHistory": [{}]
+#         }
+#     }
+# }
 
-prompt_clinical_history = """
-Return only the filled JSON object with all keys present. If a detail is not available, set its value to null. Do not include any introductory text or explanations.
-get the correct answer for each value.
 
-"""
-
-home_env = {
-    "home Environment": {
-            "safety Concerns": "",
-            "primary Caregiver Availability": {
-                "caregiver Name": "",
-                "frequency Of Support": "",
-                "type Of Support": ""
-            },
-            "home Modifications": [
-                ""
-            ]
-        }
+patient_pharmacy = {
+    "patient pharmacy": ["//Please provide the names of the patient's pharmacies."],
+    "pharmacy phone number":""
 }
-
-
-prompt_home_env = """
-Return only the filled JSON object with all keys present. If a detail is not available, set its value to null. Do not include any introductory text or explanations.
-get the answer for each value.
-"""
-
-medications = {
-    "medications": {
-            "medicationList": [
-                {
-                    "name": "Name of the medication.",
-                    "dosage": "",
-                    "form": "Form of medication (e.g., tablet, liquid).",
-                    "quantity": "Quantity of medication prescribed)for eg 1 tablet )",
-                    "route": "How the medication is administered (e.g., oral, intravenous).",
-                    "frequency": "How often the medication should be taken.",
-                    "date": "Date when the medication was prescribed.",
-                    "action": "Action to be taken regarding the medication (e.g., continue, discontinue)."
-                }
-            ],
-            "medicationReconciliation": "Comparison of patient's current medications with new prescriptions to prevent conflicts."
-        }
-}
-
-
-prompt_medications = """
-Return only the filled JSON object with all keys present. If a detail is not available, set its value to null. Do not include any introductory text or explanations.
-get the answer for each value.
-"""
 
 current_medical_statushpi = {
     "current Medical Status HPI": {
-            "summary": {
-                "allergies": [],
-                "vital Signs": {
-                    "blood Pressure": "",
-                    "heart Rate": "",
-                    "oxygen Saturation": "",
-                    "temperature": "",
-                    "weight": "",
-                    "height": ""
-                },
-                "recent Inpatient Facility": {
-                    "date Of Discharge": "",
-                    "facility Type": "",
-                    "acute Chronic Issues": ""
-                },
-                "functional Precautions": ""
+        "summary": {
+            "vital Signs": [
+                "//return all the vital signs for all the vitals found"
+            ],
+            "recent Inpatient Facility": {
+                "date Of Discharge": "",
+                "facility Type": "",
             }
         }
+    }
 }
-
-
-prompt_current_medical_statushpi = """
-Return only the filled JSON object with all keys present. If a detail is not available, set its value to null. Do not include any introductory text or explanations.
-get the answer for each value.
-"""
 
 functional_status = {
     "functional Status": {
             "mobility": {
-                "ability To Walk Or Transfer": "",
-                "assistance Needed": "",
                 "assistive Devices": [
                     ""
                 ]
-            },
-            "activities Of Daily LivingADLs": {
-                "assistance Needed": {
-                    "dressing": "",
-                    "bathing": "",
-                    "toileting": "",
-                    "feeding": ""
-                }
             }
         }
 }
 
-
-prompt_functional_status = """
-Return only the filled JSON object with all keys present. If a detail is not available, set its value to null. Do not include any introductory text or explanations.
-get the answer for each value.
-"""
-
-
+home_env = {
+    "home Environment": {
+            "primary Caregiver Availability": {
+                "caregiver Name": ""
+            }
+        }
+}
 care_team_info = {
     "care Team Information": {
             "list Of Healthcare Providers": {
                 "primary Care Physician": {
                     "name": "",
                     "contact Details": ""
-                },
-                "specialists": [],
-                "other Providers": []
+                }
             }
         }
 }
 
-
-prompt_care_team_info = """
-Return only the filled JSON object with all keys present. If a detail is not available, set its value to null. Do not include any introductory text or explanations.
-get the answer for each value.
-for contact information provide the contact details of the provider.
-"""
-
-woundcareorders = {
-    "wound Care Orders": {
-        "description": "",
-        "orders": {
-            "type Of Dressing": {
-                "description": ""
-            },
-            "frequency Of Dressing Changes": {
-                "description": ""
-            },
-            "cleaning Instructions": {
-                "description": ""
-            },
-            "debridement": {
-                "description": "",
-                "performedBy": ""
-            },
-            "wound Monitoring": {
-                "description": "",
-                "parameters": [""],
-                "signsOfInfection": [""]
-            },
-            "adjunctTherapies": {
-                "description": ""
-            }
+medications = {
+    "medications": {
+            "medicationList": ["name,dosage,form,quantity,route,frequency,date,action"],
+            "medicationReconciliation": ""
         }
+}
+
+wound_care = {
+    "woundCare": {
+        "hasWound": "",
+        "woundDescription": ""
     }
 }
 
+Iv_line = {
+    "ivLine": {
+        "hasIVLine": "",
+        "ivLineDescription": ""
+    }
+}
 
-prompt_woundcareorders = """
-Return only the filled JSON object with all keys present. If a detail is not available, set its value to null. Do not include any introductory text or explanations.
-get the answer for each value.
-"""
+PICC_line = {
+    "piccLine": {
+        "hasPICCLine": "",
+        "piccLineDescription": ""
+    }
 
+}
 
-iv_therapy = {
-    "iv Therapy": {
-      "description": "",
-      "specifics": {
-        "type Of Iv Fluid Or Medication": {
-          "description": "",
-          "examples": [
-            "saline",
-            "dextrose",
-            "antibiotics",
-            "pain medications"
-          ]
-        },
-        "dosage": {
-          "description": ""
-        },
-        "frequency And Duration": {
-          "description": "",
-          "examples": [
-            "once a day",
-            "continuously over a certain number of hours"
-          ]
-        },
-        "method Of Administration": {
-          "description": "",
-          "options": [
-            "peripheral IV line",
-            "central line",
-            "PICC line"
-          ]
-        },
-        "monitoring": {
-          "description": "",
-          "parameters": [
-            "vital signs",
-            "signs of complications"
-          ],
-          "complications": [
-            "infiltration",
-            "phlebitis"
-          ]
-        }
-      }
-    },
-    "picc Line": {
-      "description": "",
-      "care": {
-        "piccLineMaintenance": {
-          "description": "",
-          "solutions": [
-            "saline",
-            "heparin"
-          ]
-        },
-        "dressing Changes": {
-          "description": "",
-          "performed By": "",
-          "frequency": ""
-        },
-        "medication Administration": {
-          "description": "",
-          "considerations": [
-            "Checking compatibility of different medications before administration."
-          ]
-        },
-        "signs Of Infection": {
-          "description": "",
-          "indicators": [
-            "redness",
-            "warmth",
-            "swelling",
-            "fever",
-            "chills"
-          ]
-        },
-        "labDraws": {
-          "description": ""
-        }
-      }
-    },
+TPN = {
     "tpn": {
-      "description": "",
-      "specifics": {
-        "composition": {
-          "description": "",
-          "components": [
-            "glucose",
-            "amino acids",
-            "fats",
-            "vitamins",
-            "electrolytes"
-          ]
-        },
-        "rate Of Administration": {
-          "description": "",
-          "method": ""
-        },
-        "monitoring": {
-          "description": "",
-          "parameters": [
-            "blood sugar levels",
-            "electrolytes",
-            "liver function",
-            "hydration status"
-          ]
-        },
-        "complications": {
-          "description": "",
-          "examples": [
-            "catheter-related infections",
-            "metabolic imbalances",
-            "hyperglycemia",
-            "electrolyte disturbances"
-          ]
-        }
-      }
-    },
-    "lab Orders": {
-      "description": "",
-      "tests": {
-        "blood Tests": {
-          "examples": {
-            "cbc": "",
-            "bmp": "",
-            "cmp": "",
-            "inr": "",
-            "bloodGlucoseLevels": ""
-          }
-        },
-        "urine Tests": {
-          "description": ""
-        },
-        "cultures": {
-          "description": "",
-          "types": [
-            "blood cultures",
-            "urine cultures",
-            "wound cultures"
-          ]
-        }
-      },
-      "timing And Frequency": {
-        "description": "",
-        "examples": [
-          "weekly",
-          "daily",
-          "as needed"
-        ]
-      }
-    },
-    "weight Bearing Precautions": {
-      "description": "",
-      "categories": {
-        "non Weight Bearing": {
-          "description": ""
-        },
-        "toe Touch Weight Bearing": {
-          "description": ""
-        },
-        "partial Weight Bearing": {
-          "description": ""
-        },
-        "weight Bearing As Tolerated": {
-          "description": ""
-        },
-        "full Weight Bearing": {
-          "description": ""
-        }
-      }
-    },
-    "bed bound": {
-      "description": "",
-      "causes": {
-        "severe Illness": {
-          "description": ""
-        },
-        "post Surgery": {
-          "description": ""
-        },
-        "chronic Conditions": {
-          "description": ""
-        }
-      }
-    },
-    "wheel chair Bound": {
-      "description": "",
-      "causes": {
-        "neurological Disorders": {
-          "description": ""
-        },
-        "severe Arthritis Or Joint Problems": {
-          "description": ""
-        },
-        "muscle Weakness": {
-          "description": ""
-        }
-      },
-      "mobility Status": {
-        "description": "",
-        "considerations": [
-          "Pressure ulcer prevention and monitoring",
-          "Safe transfers between wheelchair and bed",
-          "Physical therapy for maintaining upper body strength"
-        ]
-      }
-    },
-    "aAndO": {
-      "description": "",
-      "levels": {
-        "aAndOx1": {
-          "description": ""
-        },
-        "aAndOx2": {
-          "description": ""
-        },
-        "aAndOx3": {
-          "description": ""
-        },
-        "aAndOx4": {
-          "description": ""
-        }
-      },
-      "implications": {
-        "description": ""
-      }
+        "hasTPN": "",
+        "tpnDescription": ""
     }
-  }
 
+}
 
-
-prompt_ivtherapy = """
-Return only the filled JSON object with all keys present. If a detail is not available, set its value to null. Do not include any introductory text or explanations.
-get the answer for each value.
-"""
-
-
+Weight_bearing_precautions ={
+    "weightBearingPrecautions": {
+        "categories": {
+            "nonWeightBearing": {
+                "description": ""
+            },
+            "toeTouchWeightBearing": {
+                "description": ""
+            },
+            "partialWeightBearing": {
+                "description": ""
+            },
+            "weightBearingAsTolerated": {
+                "description": ""
+            },
+            "fullWeightBearing": {
+                "description": ""
+            }
+        }
+    }
+}
 
 s3 = boto3.client('s3')
 ssm_client = boto3.client('ssm')
@@ -605,7 +278,8 @@ index_creator = VectorstoreIndexCreator(
 llm = BedrockChat(
     model_id="anthropic.claude-3-haiku-20240307-v1:0",
     client=bedrock_runtime,
-    region_name="us-east-1"
+    region_name="us-east-1",
+    model_kwargs={"temperature": 0.0},
 )
 
 document_chain = create_stuff_documents_chain(llm,prompt)
@@ -620,40 +294,47 @@ def lambda_handler(event, context):
     s3.download_file(bucket_name, f"{job_id}/embeddings/index.pkl", "/tmp/index.pkl")
 
     faiss_index = FAISS.load_local("/tmp", embeddings, allow_dangerous_deserialization=True)
-    retriever = faiss_index.as_retriever()
+    # retriever = faiss_index.as_retriever()
+
+    retriever = faiss_index.as_retriever(search_kwargs={"k":20})
     retrieval_chain = create_retrieval_chain(retriever, document_chain)
 
-    def process_json(index, data_json, prompt):
+    def process_json(index, data_json):
         try:
             # Convert the JSON data to a string
             data_json_str = json.dumps(data_json, indent=2)
 
-            # response = retrieval_chain.invoke({"input":f"analyse and asnwer properly and return the whole answer . fill the answer for this {data_json_str}","prompt": prompt})
-            response1 = retrieval_chain.invoke({"input":f"Understand and fill the answer for this {data_json_str}","prompt": prompt})
-            # print(response["answer"])
+            response1 = retrieval_chain.invoke({"input": f"Understand and fill the answer for this {data_json_str}.Don't return anything extra other than the things mentioned in the context.return the answer as it is without modification.return Not Found as answer for each field incase of not getting answer.Do Not return blank or null values, empty strings incase you didnt find an answer."})
             response = response1["answer"]
-            # print("1",response)
-            # print("2",index)
+            print(response)
 
             return index, response
         except Exception as e:
             print(f"Error in task {index}: {e}")
-            return index, None, str(e)
-    
+            return index, None, str(e)  # Ensure three values are always returned
 
     # Create a list of tasks with indices
     tasks = [
-        (patient_info, prompt_patient_info),
-        (reason_for_referral, prompt_reason_for_referral),
-        (requested_service, prompt_requested_service),
-        (s_o_r, prompt_s_o_r),
-        (clinical_history , prompt_clinical_history ),
-        (current_medical_statushpi,prompt_current_medical_statushpi),
-        (functional_status,prompt_functional_status),
-        (home_env,prompt_home_env),
-        (care_team_info, prompt_care_team_info),
-        (medications, prompt_medications),
-        (woundcareorders,prompt_woundcareorders)
+        patient_info,
+        insurance,
+        reason_for_referral,
+        requested_service,
+        s_o_r,
+        clinical_history_Current_Diagnoses,
+        clinical_history_Past_Diagnoses,
+        clinical_history_recent_Surgical_History,
+        # clinical_history_past_Medical_History,
+        patient_pharmacy,
+        current_medical_statushpi,
+        functional_status,
+        home_env,
+        care_team_info,
+        medications,
+        wound_care,
+        Iv_line,
+        PICC_line,
+        TPN,
+        Weight_bearing_precautions
     ]
 
     responses = {}
@@ -661,8 +342,8 @@ def lambda_handler(event, context):
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
         # Submit all tasks sequentially
         futures = []
-        for index, (data_json, prompt) in enumerate(tasks):
-            future = executor.submit(process_json, index, data_json, prompt)
+        for index, data_json in enumerate(tasks):
+            future = executor.submit(process_json, index, data_json)
             futures.append(future)
 
         # Wait for all tasks to complete
@@ -677,8 +358,6 @@ def lambda_handler(event, context):
                     continue
                 
                 responses[str(index)] = response
-                
-                print(f"Response saved for Task {index}")
             except Exception as e:
                 print(f"Task with index {index} generated an exception: {e}")
 
@@ -703,8 +382,6 @@ def lambda_handler(event, context):
         Type='String',
         Overwrite=True
     )
-
-
 
     return {
         "statusCode": 200,
