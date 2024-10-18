@@ -65,11 +65,13 @@ def lambda_handler(event, context):
     docs = loader.load()
     text_splitter = RecursiveCharacterTextSplitter()
     documents = text_splitter.split_documents(docs)
+    vector = FAISS.from_documents(documents, embeddings)
+    vector.save_local(folder_path="/tmp/", index_name='index')
     # vector = FAISS.from_documents(documents, embeddings)
 
-    index_from_loader = index_creator.from_loaders([loader])
+    # index_from_loader = index_creator.from_loaders([loader])
 
-    index_from_loader.vectorstore.save_local("/tmp")
+    # index_from_loader.vectorstore.save_local("/tmp")
 
     s3.upload_file(
         "/tmp/index.faiss", bucket_name, f"{job_id}/embeddings/index.faiss"
