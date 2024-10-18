@@ -22,14 +22,6 @@ def invoke_secondary_lambda_async(payload):
     )
     return response
 
-# def invoke_secondary_lambda_async(payload):
-#     response = lambda_client.invoke(
-#         FunctionName=secondary_lambda_arn,
-#         InvocationType='Event',  # Asynchronous invocation
-#         Payload=json.dumps(payload)
-#     )
-#     return response
-
 
 images_dir = '/tmp/images'
 supported_image_formats = ('.jpeg', '.jpg', '.png')
@@ -43,9 +35,6 @@ textract = boto3.client('textract')
 def lambda_handler(event, context):
     job_id = event['job_id']
     links = event.get('links', [])
-    parameter_name = event
-    all_table_info = []
-    all_final_maps = {}
     aggregated_text = ""
     confidence_scores = []
 
@@ -85,7 +74,7 @@ def lambda_handler(event, context):
 
                     for item in response['Blocks']:
                         if item['BlockType'] == 'LINE':
-                            aggregated_text += item['Text'] + "\n"
+                            aggregated_text += item['Text'] + ""
                             total_confidence += item['Confidence']
                             block_count += 1
                         # Collect unique layout types (e.g., LINE, TABLE, FORM)
