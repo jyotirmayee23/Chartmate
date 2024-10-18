@@ -42,13 +42,6 @@ def lambda_handler(event, context):
         Type='String',
         Overwrite=True
     )
-    
-    # Prepare payload for the secondary Lambda function
-    # payload = {
-    #     "job_id": job_id,
-    #     "event_data": event,
-    #     "links": links
-    # }
 
     payload = {
         "job_id": job_id,
