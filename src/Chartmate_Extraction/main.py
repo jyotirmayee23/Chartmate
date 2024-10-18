@@ -36,6 +36,7 @@ patient_info = {
     "patient Information": {
             "fullName": "",
             "dateOfBirth": "//should be in this format xx/xx/xxxx",
+            "social security number":"",
             "gender": "////would be nice to have male, female or not-known",
             "address": {
                 "streetNumber": "",
@@ -138,16 +139,6 @@ clinical_history_recent_Surgical_History = {
         }
     }
 }
-
-
-# clinical_history_past_Medical_History = {
-#     "clinicalHistory": {
-#         "comprehensiveMedicalHistory": {
-#             "pastMedicalHistory": [{}]
-#         }
-#     }
-# }
-
 
 patient_pharmacy = {
     "patient pharmacy": ["//Please provide the names of the patient's pharmacies."],
