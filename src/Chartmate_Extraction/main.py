@@ -1,12 +1,8 @@
 import boto3
 from io import BytesIO
 import json
-import datetime
-import os
-import tempfile
 from botocore.config import Config
-import requests
-import io
+import time
 from langchain.embeddings import BedrockEmbeddings
 from langchain.indexes import VectorstoreIndexCreator
 from langchain.vectorstores import FAISS
@@ -277,7 +273,8 @@ document_chain = create_stuff_documents_chain(llm,prompt)
 
 
 def lambda_handler(event, context):
-    print("Event:", event)
+    start_time = event['total_time']
+    print("1",start_time)
     bucket_name = "chartmate-idp" 
     job_id = event['job_id']
 
@@ -285,8 +282,6 @@ def lambda_handler(event, context):
     s3.download_file(bucket_name, f"{job_id}/embeddings/index.pkl", "/tmp/index.pkl")
 
     faiss_index = FAISS.load_local("/tmp", embeddings, allow_dangerous_deserialization=True)
-    # retriever = faiss_index.as_retriever()
-
     retriever = faiss_index.as_retriever(search_kwargs={"k":20})
     retrieval_chain = create_retrieval_chain(retriever, document_chain)
 
@@ -297,7 +292,6 @@ def lambda_handler(event, context):
 
             response1 = retrieval_chain.invoke({"input": f"Understand and fill the answer for this {data_json_str}.Don't return anything extra other than the things mentioned in the context.return the answer as it is without modification.return Not Found as answer for each field incase of not getting answer.Do Not return blank or null values, empty strings incase you didnt find an answer."})
             response = response1["answer"]
-            print(response)
 
             return index, response
         except Exception as e:
@@ -314,7 +308,6 @@ def lambda_handler(event, context):
         clinical_history_Current_Diagnoses,
         clinical_history_Past_Diagnoses,
         clinical_history_recent_Surgical_History,
-        # clinical_history_past_Medical_History,
         patient_pharmacy,
         current_medical_statushpi,
         functional_status,
@@ -361,11 +354,8 @@ def lambda_handler(event, context):
     with open(output_file_path, 'w') as f:
         json.dump(final_json, f, indent=2)
 
-    print(f"All tasks completed. Results saved to {output_file_path}")
-
     # Upload the JSON file to S3
     s3.upload_file(output_file_path, bucket_name, f"{job_id}/combined_responses.json")
-    print(f"File uploaded to S3: s3://{bucket_name}/{job_id}/combined_responses.json")
 
     ssm_client.put_parameter(
         Name=job_id,
@@ -373,6 +363,10 @@ def lambda_handler(event, context):
         Type='String',
         Overwrite=True
     )
+
+    processing_end_time = time.time()
+    total_time = processing_end_time - start_time
+    print(f"Total time taken: {total_time} seconds")
 
     return {
         "statusCode": 200,
