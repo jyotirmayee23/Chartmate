@@ -59,6 +59,7 @@ def lambda_handler(event, context):
                 s3_client.download_file(bucket_name, f"{job_id}/{file_name}", local_file_path)
                 print(f"Downloaded {file_name} to {local_file_path}.")
 
+
                 # Load and process the JSON data from the downloaded file
                 with open(local_file_path, 'r') as f:
                     json_data = json.load(f)
@@ -69,7 +70,6 @@ def lambda_handler(event, context):
                                 responses[key] = json.loads(value)
                             except json.JSONDecodeError:
                                 print(f"Error decoding JSON for key {key}: {value}")
-
                 # Count 'Not Found' values
                 counts = {'not_found': 0, 'total': 0}
                 for key, response_data in responses.items():
@@ -80,10 +80,29 @@ def lambda_handler(event, context):
                 found_percentage = (found_count / total_fields_count) * 100
 
                 print(f"Percentage of found values: {found_percentage:.2f}%")
+                
+                cleaned_responses = []
+
+                for value in responses.values():
+                    if isinstance(value, dict):  # Check if value is already a dictionary
+                        cleaned_responses.append(value)
+                    else:
+                        try:
+                            # If it's a string, parse it into a dictionary
+                            parsed_value = json.loads(value)
+                            cleaned_responses.append(parsed_value)
+                        except json.JSONDecodeError:
+                            print(f"Error decoding JSON for value: {value}")
 
                 json_data["found_percentage"] = found_percentage  # Attach percentage to the final JSON
 
-                final_json = json.dumps(json_data, indent=2)
+
+                final_output = {
+                    "responses": cleaned_responses,
+                    "found_percentage": found_percentage
+                }
+
+                json_output = json.dumps(final_output, indent=2)
 
                 # Return the processed JSON data along with the found percentage
                 return {
@@ -94,7 +113,7 @@ def lambda_handler(event, context):
                         "Access-Control-Allow-Origin": "*",
                         "Access-Control-Allow-Methods": "*",
                     },
-                    "body": final_json,
+                    "body": json_output,
                 }
             else:
                 # If extraction is not completed, return a message to try again later
