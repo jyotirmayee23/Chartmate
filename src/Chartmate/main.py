@@ -1,7 +1,6 @@
 import boto3
 import json
 import os
-import time
 import fitz
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -11,6 +10,7 @@ s3 = boto3.client('s3')
 textract = boto3.client('textract')
 
 secondary_lambda_arn = os.getenv('CHARTMATE_EMBEDDING_FUNCTION_ARN')
+print("@", secondary_lambda_arn)
 
 def invoke_secondary_lambda_async(payload):
     response = lambda_client.invoke(
@@ -37,15 +37,15 @@ def process_page(page_number, local_path, textract_client):
         FeatureTypes=["TABLES", "FORMS"]  # Include features if needed
     )
 
+    page_text = " ".join(item['Text'] for item in response['Blocks'] if item['BlockType'] == 'LINE')
+
     total_confidence = sum(item['Confidence'] for item in response['Blocks'] if item['BlockType'] == 'LINE')
     block_count = sum(1 for item in response['Blocks'] if item['BlockType'] == 'LINE')
-
-    page_text = "".join(item['Text'] for item in response['Blocks'] if item['BlockType'] == 'LINE')
-
     avg_confidence = total_confidence / block_count if block_count > 0 else 0
-    return page_text, avg_confidence
 
-def process_pdf(local_path, textract_client, pdf_name):
+    return page_number, page_text, avg_confidence  # Return page number with the result
+
+def process_pdf(local_path, textract_client):
     aggregated_text = ""
     confidence_scores = []
 
@@ -53,31 +53,20 @@ def process_pdf(local_path, textract_client, pdf_name):
         pdf_document = fitz.open(local_path)
         futures = {executor.submit(process_page, page_number, local_path, textract_client): page_number for page_number in range(len(pdf_document))}
 
-        for future in as_completed(futures):
-            page_number = futures[future]
-            try:
-                text, avg_confidence = future.result()
-                aggregated_text += f"Page {page_number + 1}:\n{text}\n\n"  # Append page number
-                confidence_scores.append(avg_confidence)
-            except Exception as e:
-                print(f"Error processing page {page_number}: {e}")
+        # Collect results and sort by page number
+        results = sorted((future.result() for future in as_completed(futures)), key=lambda x: x[0])
+        for page_number, text, avg_confidence in results:  # Unpack the sorted results
+            aggregated_text += text + " "  # Append text in sequence with a space after each block
+            confidence_scores.append(avg_confidence)
 
     overall_average_confidence = sum(confidence_scores) / len(confidence_scores) if confidence_scores else 0
     
-    # Save the output file named after the PDF
-    output_filename = f"/tmp/{pdf_name.replace('.pdf', '.txt')}"
-    with open(output_filename, 'w') as output_file:
-        output_file.write(aggregated_text)
-    
-    return output_filename, overall_average_confidence
+    return aggregated_text, overall_average_confidence
 
 def lambda_handler(event, context):
-    # Capture the start time from the event
-    start_time = event['total_time']
-    print("1", start_time)
-
     job_id = event['job_id']
     links = event.get('links', [])
+    aggregated_text = ""
     overall_confidences = []
 
     for link in links:
@@ -88,26 +77,26 @@ def lambda_handler(event, context):
             local_path = f'/tmp/{os.path.basename(object_key)}'
             s3.download_file(bucket_name, object_key, local_path)
 
-            output_filename, avg_confidence = process_pdf(local_path, textract, os.path.basename(object_key))
+            text, avg_confidence = process_pdf(local_path, textract)
+            aggregated_text += text
             overall_confidences.append(avg_confidence)
 
-            # Upload the individual text file back to S3
-            s3.upload_file(output_filename, bucket_name, f"{job_id}/{os.path.basename(output_filename)}")
-
             os.remove(local_path)  # Clean up temporary file
-            os.remove(output_filename)  # Clean up text file
 
     overall_average_confidence = sum(overall_confidences) / len(overall_confidences) if overall_confidences else 0
 
-    processing_end_time = time.time()
-    total_time = processing_end_time - start_time
+    output_filename = f"/tmp/output_{overall_average_confidence:.2f}".replace('.', '_').lower() + ".txt"
+    with open(output_filename, 'w') as output_file:
+        output_file.write(aggregated_text)
+    
+    object_name = f"{job_id}/{os.path.basename(output_filename)}"
+    s3.upload_file(output_filename, bucket_name, object_name)
+    os.remove(output_filename)  # Clean up text file
 
     payload = {
         "job_id": job_id,
-        "links": links,
-        "total_time": total_time
+        "links": links
     }
-    print(f"Total time taken: {total_time} seconds")
     invoke_secondary_lambda_async(payload)
 
     return {
