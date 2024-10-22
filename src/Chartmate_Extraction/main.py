@@ -29,15 +29,15 @@ return not found in case you do not found an answer instead of keeping blank.
 Question: {input}""")
 
 patient_info = {
-    "patient Information": {
+    "patientInformation": {
             "fullName": "",
             "dateOfBirth": "//should be in this format xx/xx/xxxx",
-            "social security number":"",
+            "socialSecurityNumber":"",
             "gender": "////would be nice to have male, female or not-known",
             "address": {
                 "streetNumber": "",
                 "streetName": "",
-                "apartment UnitNumber": "",
+                "apartmentUnitNumber": "",
                 "city": "",
                 "state": "",
                 "zipCode": ""
@@ -46,47 +46,47 @@ patient_info = {
                 "homePhone": "",
                 "mobilePhone": ""
             },
-            "advanced Directive": "//if advance directive found , then check the respective file details also.",
+            "advancedDirective": "//if advance directive found , then check the respective file details also.",
         }
 }
 
 insurance = {
-    "insurance Information": {
-                "primary Insurance": {
-                    "payor Name": "//Name of the insurance company",
+    "insuranceInformation": {
+                "primaryInsurance": {
+                    "payorName": "//Name of the insurance company",
                     "policyInsuranceHolder": "",
                     "planDetails": "",
-                    "policy Number": "",
-                    "group Number": "//group number of primary insurance ",
+                    "policyNumber": "",
+                    "groupNumber": "//group number of primary insurance ",
                     "contactDetails": "//phone number in primary insurance",
                 },
-                "secondary Insurance": {
-                    "payor Name": "//Name of the insurance company/insurance name(secondary)",
+                "secondaryInsurance": {
+                    "payorName": "//Name of the insurance company/insurance name(secondary)",
                     "policyInsuranceHolder": "",
                     "planDetails": "",
-                    "policy Number": "",
-                    "group Number": "//group number of secondary insurance",
+                    "policyNumber": "",
+                    "groupNumber": "//group number of secondary insurance",
                     "contactDetails": "//phone number in secondary insurance",
                 }
             }
 }
 
 reason_for_referral = {
-    "reason for Referral": {
-            "detailed Description": "///what is the reason for referral in order ?"
+    "reasonForReferral": {
+            "detailedDescription": "///what is the reason for referral in order ?"
     }
-        
+       
 }
 
 requested_service = {
-    "requested Services": {
-            "specific Services Requested": ["//only return the mentioned service from the below."
-                "Skilled Nursing",
-                "Physical Therapy (PT)",
-                "Occupational Therapy (OT)",
-                "Speech Therapy (ST)",
-                "Home Health Aide (HHA)",
-                "Medical Social Worker (MSW)"
+    "requestedServices": {
+            "specificServicesRequested": ["//only return the mentioned service from the below."
+                "skilledNursing",
+                "physicalTherapy (PT)",
+                "occupationalTherapy (OT)",
+                "speechTherapy (ST)",
+                "homeHealthAide (HHA)",
+                "medicalSocialWorker (MSW)"
             ]
         }
 }
@@ -114,51 +114,53 @@ s_o_r = {
 
 clinical_history_Current_Diagnoses = {
     "clinicalHistory": {
-        "current Diagnoses": {
-            "current Diagnoses": ["//only return current diagnoses.description,icd10code"]
-        }
+        "currentDiagnoses": ["//only return current diagnoses.description,icd10code"]
     }
 }
 
 clinical_history_Past_Diagnoses = {
     "clinicalHistory": {
-        "Past Medical History": {
-            "Past Medical History": ["//only return medical history. description,icd10code"]
-        }
+        "pastMedicalHistory": ["//only return medical history. description,icd10code"]
     }
 }
 
+# clinical_history_recent_Surgical_History = {
+#     "clinicalHistory": {
+#         "comprehensiveMedicalHistory": {
+#             "recentSurgicalHistory": ["name,date"]
+#         }
+#     }
+# }
+
 clinical_history_recent_Surgical_History = {
     "clinicalHistory": {
-        "comprehensiveMedicalHistory": {
-            "recentSurgicalHistory": ["name,date"]
-        }
+        "recentSurgicalHistory": ["name,date"]
     }
 }
 
 patient_pharmacy = {
-    "patient pharmacy": ["//Please provide the names of the patient's pharmacies."],
-    "pharmacy phone number":""
+    "patientPharmacy": ["//Please provide the names of the patient's pharmacies."],
+    "pharmacyPhoneNumber":""
 }
 
 current_medical_statushpi = {
-    "current Medical Status HPI": {
+    "currentMedicalStatusHPI": {
         "summary": {
-            "vital Signs": [
+            "vitalSigns": [
                 "//return all the vital signs for all the vitals found"
             ],
-            "recent Inpatient Facility": {
-                "date Of Discharge": "",
-                "facility Type": "",
+            "recentInpatientFacility": {
+                "dateOfDischarge": "",
+                "facilityType": "",
             }
         }
     }
 }
 
 functional_status = {
-    "functional Status": {
+    "functionalStatus": {
             "mobility": {
-                "assistive Devices": [
+                "assistiveDevices": [
                     ""
                 ]
             }
@@ -166,18 +168,19 @@ functional_status = {
 }
 
 home_env = {
-    "home Environment": {
-            "primary Caregiver Availability": {
-                "caregiver Name": ""
+    "homeEnvironment": {
+            "primaryCaregiverAvailability": {
+                "caregiverName": ""
             }
         }
 }
+
 care_team_info = {
-    "care Team Information": {
-            "list Of Healthcare Providers": {
-                "primary Care Physician": {
+    "careTeamInformation": {
+            "listOfHealthcareProviders": {
+                "primaryCarePhysician": {
                     "name": "",
-                    "contact Details": ""
+                    "contactDetails": ""
                 }
             }
         }
@@ -206,18 +209,18 @@ Iv_line = {
 
 PICC_line = {
     "piccLine": {
-        "hasPICCLine": "",
+        "hasPiccLine": "",
         "piccLineDescription": ""
     }
-
+ 
 }
 
 TPN = {
     "tpn": {
-        "hasTPN": "",
+        "hasTpn": "",
         "tpnDescription": ""
     }
-
+ 
 }
 
 Weight_bearing_precautions ={
@@ -273,8 +276,6 @@ document_chain = create_stuff_documents_chain(llm,prompt)
 
 
 def lambda_handler(event, context):
-    start_time = event['total_time']
-    print("1",start_time)
     bucket_name = "chartmate-idp" 
     job_id = event['job_id']
 
@@ -363,10 +364,6 @@ def lambda_handler(event, context):
         Type='String',
         Overwrite=True
     )
-
-    processing_end_time = time.time()
-    total_time = processing_end_time - start_time
-    print(f"Total time taken: {total_time} seconds")
 
     return {
         "statusCode": 200,
