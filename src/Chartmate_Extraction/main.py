@@ -1,12 +1,8 @@
 import boto3
 from io import BytesIO
 import json
-import datetime
-import os
-import tempfile
 from botocore.config import Config
-import requests
-import io
+import time
 from langchain.embeddings import BedrockEmbeddings
 from langchain.indexes import VectorstoreIndexCreator
 from langchain.vectorstores import FAISS
@@ -17,6 +13,7 @@ from langchain_community.chat_models import BedrockChat
 import concurrent.futures
 # import uuid
 
+ssm_client = boto3.client('ssm')
 
 from langchain_core.prompts import ChatPromptTemplate
 prompt = ChatPromptTemplate.from_template("""Please fill in the missing details in the following information::
@@ -33,15 +30,15 @@ return not found in case you do not found an answer instead of keeping blank.
 Question: {input}""")
 
 patient_info = {
-    "patient Information": {
+    "patientInformation": {
             "fullName": "",
             "dateOfBirth": "//should be in this format xx/xx/xxxx",
-            "social security number":"",
+            "socialSecurityNumber":"",
             "gender": "////would be nice to have male, female or not-known",
             "address": {
                 "streetNumber": "",
                 "streetName": "",
-                "apartment UnitNumber": "",
+                "apartmentUnitNumber": "",
                 "city": "",
                 "state": "",
                 "zipCode": ""
@@ -50,47 +47,47 @@ patient_info = {
                 "homePhone": "",
                 "mobilePhone": ""
             },
-            "advanced Directive": "//if advance directive found , then check the respective file details also.",
+            "advancedDirective": "//if advance directive found , then check the respective file details also.",
         }
 }
 
 insurance = {
-    "insurance Information": {
-                "primary Insurance": {
-                    "payor Name": "//Name of the insurance company",
+    "insuranceInformation": {
+                "primaryInsurance": {
+                    "payorName": "//Name of the insurance company",
                     "policyInsuranceHolder": "",
                     "planDetails": "",
-                    "policy Number": "",
-                    "group Number": "//group number of primary insurance ",
+                    "policyNumber": "",
+                    "groupNumber": "//group number of primary insurance ",
                     "contactDetails": "//phone number in primary insurance",
                 },
-                "secondary Insurance": {
-                    "payor Name": "//Name of the insurance company/insurance name(secondary)",
+                "secondaryInsurance": {
+                    "payorName": "//Name of the insurance company/insurance name(secondary)",
                     "policyInsuranceHolder": "",
                     "planDetails": "",
-                    "policy Number": "",
-                    "group Number": "//group number of secondary insurance",
+                    "policyNumber": "",
+                    "groupNumber": "//group number of secondary insurance",
                     "contactDetails": "//phone number in secondary insurance",
                 }
             }
 }
 
 reason_for_referral = {
-    "reason for Referral": {
-            "detailed Description": "///what is the reason for referral in order ?"
+    "reasonForReferral": {
+            "detailedDescription": "///what is the reason for referral in order ?"
     }
-        
+       
 }
 
 requested_service = {
-    "requested Services": {
-            "specific Services Requested": ["//only return the mentioned service from the below."
-                "Skilled Nursing",
-                "Physical Therapy (PT)",
-                "Occupational Therapy (OT)",
-                "Speech Therapy (ST)",
-                "Home Health Aide (HHA)",
-                "Medical Social Worker (MSW)"
+    "requestedServices": {
+            "specificServicesRequested": ["//only return the mentioned service from the below."
+                "skilledNursing",
+                "physicalTherapy (PT)",
+                "occupationalTherapy (OT)",
+                "speechTherapy (ST)",
+                "homeHealthAide (HHA)",
+                "medicalSocialWorker (MSW)"
             ]
         }
 }
@@ -118,51 +115,53 @@ s_o_r = {
 
 clinical_history_Current_Diagnoses = {
     "clinicalHistory": {
-        "current Diagnoses": {
-            "current Diagnoses": ["//only return current diagnoses.description,icd10code"]
-        }
+        "currentDiagnoses": ["//only return current diagnoses.description,icd10code"]
     }
 }
 
 clinical_history_Past_Diagnoses = {
     "clinicalHistory": {
-        "Past Medical History": {
-            "Past Medical History": ["//only return medical history. description,icd10code"]
-        }
+        "pastMedicalHistory": ["//only return medical history. description,icd10code"]
     }
 }
 
+# clinical_history_recent_Surgical_History = {
+#     "clinicalHistory": {
+#         "comprehensiveMedicalHistory": {
+#             "recentSurgicalHistory": ["name,date"]
+#         }
+#     }
+# }
+
 clinical_history_recent_Surgical_History = {
     "clinicalHistory": {
-        "comprehensiveMedicalHistory": {
-            "recentSurgicalHistory": ["name,date"]
-        }
+        "recentSurgicalHistory": ["name,date"]
     }
 }
 
 patient_pharmacy = {
-    "patient pharmacy": ["//Please provide the names of the patient's pharmacies."],
-    "pharmacy phone number":""
+    "patientPharmacy": ["//Please provide the names of the patient's pharmacies."],
+    "pharmacyPhoneNumber":""
 }
 
 current_medical_statushpi = {
-    "current Medical Status HPI": {
+    "currentMedicalStatusHPI": {
         "summary": {
-            "vital Signs": [
+            "vitalSigns": [
                 "//return all the vital signs for all the vitals found"
             ],
-            "recent Inpatient Facility": {
-                "date Of Discharge": "",
-                "facility Type": "",
+            "recentInpatientFacility": {
+                "dateOfDischarge": "",
+                "facilityType": "",
             }
         }
     }
 }
 
 functional_status = {
-    "functional Status": {
+    "functionalStatus": {
             "mobility": {
-                "assistive Devices": [
+                "assistiveDevices": [
                     ""
                 ]
             }
@@ -170,18 +169,19 @@ functional_status = {
 }
 
 home_env = {
-    "home Environment": {
-            "primary Caregiver Availability": {
-                "caregiver Name": ""
+    "homeEnvironment": {
+            "primaryCaregiverAvailability": {
+                "caregiverName": ""
             }
         }
 }
+
 care_team_info = {
-    "care Team Information": {
-            "list Of Healthcare Providers": {
-                "primary Care Physician": {
+    "careTeamInformation": {
+            "listOfHealthcareProviders": {
+                "primaryCarePhysician": {
                     "name": "",
-                    "contact Details": ""
+                    "contactDetails": ""
                 }
             }
         }
@@ -210,18 +210,18 @@ Iv_line = {
 
 PICC_line = {
     "piccLine": {
-        "hasPICCLine": "",
+        "hasPiccLine": "",
         "piccLineDescription": ""
     }
-
+ 
 }
 
 TPN = {
     "tpn": {
-        "hasTPN": "",
+        "hasTpn": "",
         "tpnDescription": ""
     }
-
+ 
 }
 
 Weight_bearing_precautions ={
@@ -277,7 +277,6 @@ document_chain = create_stuff_documents_chain(llm,prompt)
 
 
 def lambda_handler(event, context):
-    print("Event:", event)
     bucket_name = "chartmate-idp" 
     job_id = event['job_id']
 
@@ -285,8 +284,6 @@ def lambda_handler(event, context):
     s3.download_file(bucket_name, f"{job_id}/embeddings/index.pkl", "/tmp/index.pkl")
 
     faiss_index = FAISS.load_local("/tmp", embeddings, allow_dangerous_deserialization=True)
-    # retriever = faiss_index.as_retriever()
-
     retriever = faiss_index.as_retriever(search_kwargs={"k":20})
     retrieval_chain = create_retrieval_chain(retriever, document_chain)
 
@@ -297,7 +294,6 @@ def lambda_handler(event, context):
 
             response1 = retrieval_chain.invoke({"input": f"Understand and fill the answer for this {data_json_str}.Don't return anything extra other than the things mentioned in the context.return the answer as it is without modification.return Not Found as answer for each field incase of not getting answer.Do Not return blank or null values, empty strings incase you didnt find an answer."})
             response = response1["answer"]
-            print(response)
 
             return index, response
         except Exception as e:
@@ -314,7 +310,6 @@ def lambda_handler(event, context):
         clinical_history_Current_Diagnoses,
         clinical_history_Past_Diagnoses,
         clinical_history_recent_Surgical_History,
-        # clinical_history_past_Medical_History,
         patient_pharmacy,
         current_medical_statushpi,
         functional_status,
@@ -329,13 +324,13 @@ def lambda_handler(event, context):
     ]
 
     responses = {}
-
     ssm_client.put_parameter(
         Name=job_id,
         Value="Starting Extraction",
         Type='String',
         Overwrite=True
     )
+
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
         # Submit all tasks sequentially
         futures = []
@@ -367,11 +362,8 @@ def lambda_handler(event, context):
     with open(output_file_path, 'w') as f:
         json.dump(final_json, f, indent=2)
 
-    print(f"All tasks completed. Results saved to {output_file_path}")
-
     # Upload the JSON file to S3
     s3.upload_file(output_file_path, bucket_name, f"{job_id}/combined_responses.json")
-    print(f"File uploaded to S3: s3://{bucket_name}/{job_id}/combined_responses.json")
 
     ssm_client.put_parameter(
         Name=job_id,
