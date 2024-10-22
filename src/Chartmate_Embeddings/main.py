@@ -84,6 +84,12 @@ def lambda_handler(event, context):
         "event_data": event
     }
     
+    ssm_client.put_parameter(
+        Name=job_id,
+        Value="Vector Generated",
+        Type='String',
+        Overwrite=True
+    )
     invoke_secondary_lambda_async(payload)
 
 

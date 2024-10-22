@@ -330,6 +330,12 @@ def lambda_handler(event, context):
 
     responses = {}
 
+    ssm_client.put_parameter(
+        Name=job_id,
+        Value="Starting Extraction",
+        Type='String',
+        Overwrite=True
+    )
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
         # Submit all tasks sequentially
         futures = []
