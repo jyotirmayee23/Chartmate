@@ -1,0 +1,4 @@
+# Ignore AWS SAM build directory
+/.aws-sam/build/
+
+
