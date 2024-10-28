@@ -13,6 +13,7 @@ from langchain_community.chat_models import BedrockChat
 import concurrent.futures
 # import uuid
 
+ssm_client = boto3.client('ssm')
 
 from langchain_core.prompts import ChatPromptTemplate
 prompt = ChatPromptTemplate.from_template("""Please fill in the missing details in the following information::
@@ -25,6 +26,7 @@ please return evrything and dont stop at the middle.
 please return in correct json format only.
 retrieve the aprropriate values from the context.
 Only Answer from the context.
+Do not return values in camel Case.
 return not found in case you do not found an answer instead of keeping blank.
 Question: {input}""")
 
@@ -123,14 +125,6 @@ clinical_history_Past_Diagnoses = {
         "pastMedicalHistory": ["//only return medical history. description,icd10code"]
     }
 }
-
-# clinical_history_recent_Surgical_History = {
-#     "clinicalHistory": {
-#         "comprehensiveMedicalHistory": {
-#             "recentSurgicalHistory": ["name,date"]
-#         }
-#     }
-# }
 
 clinical_history_recent_Surgical_History = {
     "clinicalHistory": {
@@ -283,23 +277,19 @@ def lambda_handler(event, context):
     s3.download_file(bucket_name, f"{job_id}/embeddings/index.pkl", "/tmp/index.pkl")
 
     faiss_index = FAISS.load_local("/tmp", embeddings, allow_dangerous_deserialization=True)
-    retriever = faiss_index.as_retriever(search_kwargs={"k":20})
+    retriever = faiss_index.as_retriever(search_kwargs={"k": 20})
     retrieval_chain = create_retrieval_chain(retriever, document_chain)
 
     def process_json(index, data_json):
         try:
-            # Convert the JSON data to a string
             data_json_str = json.dumps(data_json, indent=2)
-
-            response1 = retrieval_chain.invoke({"input": f"Understand and fill the answer for this {data_json_str}.Don't return anything extra other than the things mentioned in the context.return the answer as it is without modification.return Not Found as answer for each field incase of not getting answer.Do Not return blank or null values, empty strings incase you didnt find an answer."})
+            response1 = retrieval_chain.invoke({"input": f"Understand and fill the answer for this {data_json_str}.Don't return anything extra other than the things mentioned in the context.return the answer as it is without modification.return Not Found as answer for each field incase of not getting answer.Do Not return blank or null values, empty strings incase you didnt find an answer.Do not return values in camel Case."})
             response = response1["answer"]
-
             return index, response
         except Exception as e:
             print(f"Error in task {index}: {e}")
-            return index, None, str(e)  # Ensure three values are always returned
+            return index, None
 
-    # Create a list of tasks with indices
     tasks = [
         patient_info,
         insurance,
@@ -323,25 +313,25 @@ def lambda_handler(event, context):
     ]
 
     responses = {}
+    ssm_client.put_parameter(
+        Name=job_id,
+        Value="Starting Extraction",
+        Type='String',
+        Overwrite=True
+    )
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-        # Submit all tasks sequentially
         futures = []
         for index, data_json in enumerate(tasks):
             future = executor.submit(process_json, index, data_json)
             futures.append(future)
 
-        # Wait for all tasks to complete
         for future in concurrent.futures.as_completed(futures):
             index = futures.index(future)
             try:
                 _, response = future.result()
-                
                 if response is None:
-                    error_message = f"Task with index {index} generated an exception: {str(future.exception())}"
-                    print(error_message)
                     continue
-                
                 responses[str(index)] = response
             except Exception as e:
                 print(f"Task with index {index} generated an exception: {e}")
@@ -351,12 +341,57 @@ def lambda_handler(event, context):
         "responses": responses
     }
 
-    output_file_path = '/tmp/combined_responses.json'
+    output_file_path = '/tmp/combined_responses1.json'
     with open(output_file_path, 'w') as f:
         json.dump(final_json, f, indent=2)
 
-    # Upload the JSON file to S3
-    s3.upload_file(output_file_path, bucket_name, f"{job_id}/combined_responses.json")
+    # Load the existing JSON structure for updating
+    with open(output_file_path, 'r') as file:
+        data = json.load(file)
+
+    # Initialize an empty dictionary for responses
+    updated_responses = {}
+
+    # Create a mapping of response keys
+    response_keys = [
+        "patientInformation",
+        "insuranceInformation",
+        "reasonForReferral",
+        "requestedServices",
+        "sourceOfReferral",
+        "clinicalHistoryCurrentDiagnoses",
+        "clinicalHistoryPastMedicalHistory",
+        "clinicalHistoryComprehensiveMedicalHistory",
+        "patientPharmacy",
+        "currentMedicalStatusHPI",
+        "functionalStatus",
+        "homeEnvironment",
+        "careTeamInformation",
+        "medications",
+        "woundCare",
+        "ivLine",
+        "piccLine",
+        "tpn",
+        "weightBearingPrecautions"
+    ]
+
+    # Populate updated_responses using the new keys
+    for i, key in enumerate(response_keys):
+        if i < len(data['responses']):
+            updated_responses[key] = json.loads(data['responses'][str(i)])
+
+    # Create a new JSON structure with updated responses
+    updated_data = {
+        "responses": updated_responses
+    }
+
+    # Save the updated structure to a new JSON file
+    updated_output_file_path = '/tmp/combined_responses.json'
+    with open(updated_output_file_path, 'w') as file:
+        json.dump(updated_data, file, indent=2)
+
+    # Upload the updated JSON file to S3
+    s3.upload_file(updated_output_file_path, bucket_name, f"{job_id}/combined_responses.json")
 
     ssm_client.put_parameter(
         Name=job_id,
