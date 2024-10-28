@@ -3,6 +3,7 @@ import json
 import os
 import fitz
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from botocore.exceptions import ClientError
 
 # Initialize boto3 clients
 lambda_client = boto3.client('lambda')
@@ -10,7 +11,14 @@ s3 = boto3.client('s3')
 textract = boto3.client('textract')
 
 secondary_lambda_arn = os.getenv('CHARTMATE_EMBEDDING_FUNCTION_ARN')
-print("@", secondary_lambda_arn)
+
+def check_for_existing_txt_file(bucket_name, job_id):
+    response = s3.list_objects_v2(Bucket=bucket_name, Prefix=f"{job_id}/")
+    if 'Contents' in response:
+        for obj in response['Contents']:
+            if obj['Key'].endswith('.txt'):
+                return obj['Key']  # Return the key of the existing text file
+    return None
 
 def invoke_secondary_lambda_async(payload):
     response = lambda_client.invoke(
@@ -22,8 +30,8 @@ def invoke_secondary_lambda_async(payload):
 
 def extract_bucket_name(url):
     bucket_name = url.split('/')[2]
-    if '.s3.amazonaws.com' in bucket_name:
-        bucket_name = bucket_name.rstrip('.s3.amazonaws.com')
+    if '.s3.us-east-1.amazonaws.com' in bucket_name:
+        bucket_name = bucket_name.rstrip('.s3.us-east-1.amazonaws.com')
     return bucket_name
 
 def process_page(page_number, local_path, textract_client):
@@ -34,7 +42,8 @@ def process_page(page_number, local_path, textract_client):
 
     response = textract_client.analyze_document(
         Document={'Bytes': img_bytes},
-        FeatureTypes=["TABLES", "FORMS"]  # Include features if needed
+        FeatureTypes=["TABLES"] 
+        # FeatureTypes=["TABLES", "FORMS"]  # Include features if needed
     )
 
     page_text = " ".join(item['Text'] for item in response['Blocks'] if item['BlockType'] == 'LINE')
@@ -66,15 +75,32 @@ def process_pdf(local_path, textract_client):
 def lambda_handler(event, context):
     job_id = event['job_id']
     links = event.get('links', [])
+    print("links", links)
+    bucket_name = "chartmate-idp"
+    existing_file_key = check_for_existing_txt_file(bucket_name, job_id)
+    existing_text = ""
+
+    # If an existing file is found, download its contents
+    if existing_file_key:
+        try:
+            s3.download_file(bucket_name, existing_file_key, '/tmp/existing_output.txt')
+            with open('/tmp/existing_output.txt', 'r') as existing_file:
+                existing_text = existing_file.read()
+        except ClientError as e:
+            print(f"Error downloading existing file: {e}")
+
     aggregated_text = ""
     overall_confidences = []
 
     for link in links:
         bucket_name = extract_bucket_name(link)
         object_key = '/'.join(link.split('/')[3:])
-        
+        print("object_key",object_key)
+
         if object_key.lower().endswith('.pdf'):
             local_path = f'/tmp/{os.path.basename(object_key)}'
+            print("local_path",local_path)
+
             s3.download_file(bucket_name, object_key, local_path)
 
             text, avg_confidence = process_pdf(local_path, textract)
@@ -85,13 +111,20 @@ def lambda_handler(event, context):
 
     overall_average_confidence = sum(overall_confidences) / len(overall_confidences) if overall_confidences else 0
 
-    output_filename = f"/tmp/output_{overall_average_confidence:.2f}".replace('.', '_').lower() + ".txt"
-    with open(output_filename, 'w') as output_file:
-        output_file.write(aggregated_text)
-    
-    object_name = f"{job_id}/{os.path.basename(output_filename)}"
-    s3.upload_file(output_filename, bucket_name, object_name)
-    os.remove(output_filename)  # Clean up text file
+    # Check if existing text file is present and append if it is
+    if existing_file_key:
+        with open('/tmp/existing_output.txt', 'a') as output_file:  # Append mode
+            output_file.write(aggregated_text)
+        # Upload the existing file back to S3
+        s3.upload_file('/tmp/existing_output.txt', bucket_name, existing_file_key)
+    else:
+        output_filename = f"/tmp/output_{overall_average_confidence:.2f}".replace('.', '_').lower() + ".txt"
+        with open(output_filename, 'w') as output_file:  # Write mode
+            output_file.write(aggregated_text)
+        # Upload the new output file back to S3
+        object_name = f"{job_id}/{os.path.basename(output_filename)}"
+        s3.upload_file(output_filename, bucket_name, object_name)
+        os.remove(output_filename)  # Clean up text file
 
     payload = {
         "job_id": job_id,
