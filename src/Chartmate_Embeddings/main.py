@@ -6,11 +6,13 @@ from langchain.embeddings import BedrockEmbeddings
 from langchain.indexes import VectorstoreIndexCreator
 from langchain.vectorstores import FAISS
 from langchain.document_loaders import TextLoader
+from langchain_community.document_loaders import DirectoryLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 # Initialize boto3 clients
 s3 = boto3.client('s3')
 lambda_client = boto3.client('lambda')
+ssm_client = boto3.client('ssm')
 
 third_lambda_arn = os.getenv('CHARTMATE_EXTRACTION_FUNCTION_ARN')
 
@@ -38,14 +40,14 @@ index_creator = VectorstoreIndexCreator(
 
 def lambda_handler(event, context):
     # Capture the start time from the event
-    start_time = event['total_time']
-    print("1",start_time)
     job_id = event['job_id']
     bucket_name = "chartmate-idp"
     response = s3.list_objects_v2(Bucket=bucket_name, Prefix=job_id)
     print("response ",response)
+    temp_dir = '/tmp'
     txt_file_key = next((obj['Key'] for obj in response.get('Contents', []) if obj['Key'].endswith('.txt')), None)
-    print("txt file key",txt_file_key)
+    print("2",txt_file_key)
+
 
     if txt_file_key:
         temp_dir = '/tmp'
@@ -54,7 +56,7 @@ def lambda_handler(event, context):
         print(f"File downloaded successfully: {temp_path}")
     else:
         print("No text files found in the folder.")
-
+    
     loader = TextLoader(temp_path)
     docs = loader.load()
     text_splitter = RecursiveCharacterTextSplitter()
@@ -67,15 +69,16 @@ def lambda_handler(event, context):
     )
     s3.upload_file("/tmp/index.pkl", bucket_name, f"{job_id}/embeddings/index.pkl")
 
-    # Calculate the time taken for processing
-    processing_end_time = time.time()
-    total_time = processing_end_time - start_time
-
     payload = {
-        "job_id": job_id,
-        "total_time": total_time
+        "job_id": job_id
     }
-    print(f"Total time taken: {total_time} seconds")
+
+    ssm_client.put_parameter(
+        Name=job_id,
+        Value="Vector Generated",
+        Type='String',
+        Overwrite=True
+    )
 
     invoke_secondary_lambda_async(payload)
 
