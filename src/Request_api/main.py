@@ -1,39 +1,24 @@
 import json
 import boto3
+import uuid
 import os
 import base64
 from botocore.exceptions import ClientError
 
-# Initialize AWS clients
 ssm_client = boto3.client('ssm')
+lambda_client = boto3.client('lambda')
+secondary_lambda_arn = os.getenv('CHARTMATE_FUNCTION_ARN')
 s3_client = boto3.client('s3')
 
-# Function to iterate through the JSON data and count 'Not Found' values
-def iterate_json(data, path='', counts=None):
-    if counts is None:
-        counts = {'not_found': 0, 'total': 0}
-    if isinstance(data, dict):
-        for key, value in data.items():
-            new_path = f"{path}.{key}" if path else key
-            if isinstance(value, (dict, list)):
-                iterate_json(value, new_path, counts)
-            else:
-                counts['total'] += 1
-                if value == 'Not Found' or value == '':
-                    counts['not_found'] += 1
-    elif isinstance(data, list):
-        for index, item in enumerate(data):
-            new_path = f"{path}[{index}]"
-            if isinstance(item, (dict, list)):
-                iterate_json(item, new_path, counts)
-            else:
-                counts['total'] += 1
-                if item == 'Not Found' or item == '':
-                    counts['not_found'] += 1
-    return counts
+def invoke_secondary_lambda_async(payload):
+    response = lambda_client.invoke(
+        FunctionName=secondary_lambda_arn,
+        InvocationType='Event',  # Asynchronous invocation
+        Payload=json.dumps(payload)
+    )
+    return response
 
-def lambda_handler(event, context):
-
+def lambda_handler(event, context): 
     auth_header=event['headers'].get('Authorization')
     if auth_header!=None and auth_header.startswith("Basic "):
        
@@ -81,93 +66,123 @@ def lambda_handler(event, context):
             # Validate the access token
             user_response = client.get_user(AccessToken=access_token)
             print(user_response)
-            try:
-                # Parse the incoming event body
-                body_content = event['body']
-                body_dict = json.loads(body_content)
+            bucket_name = "chartmate-idp" 
+            body_dict = json.loads(event['body'])
+            processing_links = body_dict.get('links', [])
+            links = [link.replace('+', ' ') for link in processing_links]
+                
+            print(f"Links received: {links}")
 
-                # Extract job_id from the parsed dictionary
-                job_id = body_dict.get('job_id')
-                print(f"Extracted job_id: {job_id}")
+            if 'uuid' in body_dict:
+                job_id = body_dict['uuid']
+                filenames = [os.path.splitext(os.path.basename(link))[0] for link in links]
+                print(f"Filenames extracted: {filenames}")  # Assuming all links are from the same bucket
+                log_key = f"{job_id}/log.json"
+                
+                try:
+                    s3_client.head_object(Bucket=bucket_name, Key=log_key)
+                    print("Log file exists.")
 
-                # Retrieve job status from SSM Parameter Store
-                response = ssm_client.get_parameter(Name=job_id)
-                parameter_value = response['Parameter']['Value']
+                    # Read the log.json content
+                    log_object = s3_client.get_object(Bucket=bucket_name, Key=log_key)
+                    log_content = json.loads(log_object['Body'].read().decode('utf-8'))
 
-                if parameter_value == "Extraction completed":
-                    print("The job status indicates that extraction is completed.")
-                    bucket_name = "chartmate-idp"
-                    file_name = "combined_responses.json"
-                    local_file_path = os.path.join('/tmp', file_name)
+                    # Assuming log_content has a 'filenames' key with a list of full links
+                    existing_filenames = log_content.get('filenames', [])
+                    print(f"Existing filenames in log: {existing_filenames}")
 
-                    # Download the file from S3
-                    s3_client.download_file(bucket_name, f"{job_id}/{file_name}", local_file_path)
-                    print(f"Downloaded {file_name} to {local_file_path}.")
+                    # Check for missing files by comparing full links
+                    missing_files = [link for link in links if link not in existing_filenames]
 
-                    # Load and process the JSON data from the downloaded file
-                    with open(local_file_path, 'r') as f:
-                        json_data = json.load(f)
-                        responses = json_data.get("responses", {})
+                    if missing_files:
+                        print(f"Missing files: {missing_files}")
+                        # Append missing files to the filenames list
+                        log_content['filenames'].extend(missing_files)
+                        s3_client.put_object(
+                            Bucket=bucket_name,
+                            Key=log_key,
+                            Body=json.dumps(log_content),
+                            ContentType='application/json'
+                        )
+                        print(f"Log file updated with missing files appended: {missing_files}")
+                        # Send extraction process for all missing file links in one payload
+                        extraction_payload = {
+                            "job_id": job_id,
+                            "links": missing_files  # Include full links for missing files
+                        }
+                        invoke_secondary_lambda_async(extraction_payload)
+                    else:
+                        print("All files are present.")
+                        # Return response indicating everything is up to date
+                        return {
+                            "statusCode": 200,
+                            "headers": {
+                                "Content-Type": "application/json",
+                                "Access-Control-Allow-Headers": "*",
+                                "Access-Control-Allow-Origin": "*",
+                                "Access-Control-Allow-Methods": "*",
+                            },
+                            "body": json.dumps({"message": "Everything is up to date."}),
+                        }
 
-                    # Count 'Not Found' values
-                    counts = {'not_found': 0, 'total': 0}
-                    for key, response_data in responses.items():
-                        counts = iterate_json(response_data, counts=counts)
-
-                    total_fields_count = 83  # Explicitly set the total fields to 83
-                    found_count = total_fields_count - counts['not_found']
-                    found_percentage = (found_count / total_fields_count) * 100
-                    print(f"Percentage of found values: {found_percentage:.2f}%")
-
-                    # Clean and format responses
-                    cleaned_responses = {}
-                    for key, value in responses.items():
-                        if isinstance(value, dict):
-                            cleaned_responses[key] = value  # Store as key-value pairs in a dictionary
-                        else:
-                            try:
-                                parsed_value = json.loads(value)
-                                cleaned_responses[key] = parsed_value  # Store parsed value
-                            except json.JSONDecodeError:
-                                print(f"Error decoding JSON for value: {value}")
-
-                    # Prepare final output
-                    final_output = {
-                        "responses": cleaned_responses,  # Now this is a dictionary instead of an array
-                        "found_percentage": found_percentage
-                    }
-
-                    # Return the processed JSON data along with the found percentage
+                except s3_client.exceptions.ClientError:
+                    # Log file does not exist
+                    print("Log file does not exist.")
                     return {
-                        "statusCode": 200,
+                        "statusCode": 404,
                         "headers": {
                             "Content-Type": "application/json",
                             "Access-Control-Allow-Headers": "*",
                             "Access-Control-Allow-Origin": "*",
                             "Access-Control-Allow-Methods": "*",
                         },
-                        "body": json.dumps(final_output, indent=2),
+                        "body": json.dumps({"message": "Please check the identifier."}),
                     }
-                else:
-                    # If extraction is not completed, return a message to try again later
-                    return {
-                        "statusCode": 202,
-                        "headers": {
-                            "Content-Type": "application/json",
-                            "Access-Control-Allow-Headers": "*",
-                            "Access-Control-Allow-Origin": "*",
-                            "Access-Control-Allow-Methods": "*",
-                        },
-                        "body": json.dumps({
-                            "message": "Extraction is not completed. Please try again after some time."
-                        }),
-                    }
-            except Exception as e:
-                print(f"Error occurred: {str(e)}")
-                return {
-                    "statusCode": 500,
-                    "body": json.dumps({"error": str(e)})
+            else:
+                job_id = str(uuid.uuid4())
+
+            # Update SSM parameter in both cases
+            ssm_client.put_parameter(
+                Name=job_id,
+                Value="In Progress",
+                Type='String',
+                Overwrite=True
+            )
+
+            # Prepare the payload only when job_id is generated
+            if 'uuid' not in body_dict:
+                payload = {
+                    "job_id": job_id,
+                    "links": links
                 }
+
+                # Invoke the secondary Lambda function asynchronously
+                invoke_secondary_lambda_async(payload)
+
+                # Store log_content with full links
+                log_content = {
+                    "filenames": links  # Store as a flat list of full links
+                }
+
+                # Upload log.json to S3
+                s3_client.put_object(
+                    Bucket=bucket_name,
+                    Key=f"{job_id}/log.json",
+                    Body=json.dumps(log_content),
+                    ContentType='application/json'
+                )
+
+            # Return the response immediately
+            return {
+                "statusCode": 200,
+                "headers": {
+                    "Content-Type": "application/json",
+                    "Access-Control-Allow-Headers": "*",
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "*",
+                },
+                "body": json.dumps({"job_id": job_id}),
+            }
         except ClientError as e:
                     # Return unauthorized if authentication fails or token is invalid
                     return {
